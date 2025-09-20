@@ -1,18 +1,17 @@
-import asyncio
 import os
-import sys
 import re
-import xml.etree.ElementTree as ET
-from PySide6.QtCore import *
-from PySide6.QtWidgets import *
-from PySide6.QtGui import *
-from PySide6.QtWebEngineWidgets import *
-from PySide6.QtWebEngineCore import QWebEngineProfile, QWebEngineUrlRequestInterceptor
-from PySide6.QtCore import QTimer
 import ssl
+import sys
 import urllib.request
+import xml.etree.ElementTree as ET
 from datetime import date as dt
 from distutils.util import strtobool
+from PySide6.QtCore import *
+from PySide6.QtCore import QTimer
+from PySide6.QtGui import *
+from PySide6.QtWebEngineCore import QWebEngineProfile, QWebEngineUrlRequestInterceptor
+from PySide6.QtWebEngineWidgets import *
+from PySide6.QtWidgets import *
 
 ssl._create_default_https_context = ssl._create_unverified_context
 out_adblock_list = []
