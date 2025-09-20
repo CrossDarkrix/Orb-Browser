@@ -1,9 +1,7 @@
+import asyncio
 import os
 import sys
 import re
-import asyncio
-import aiohttp
-import threading
 import xml.etree.ElementTree as ET
 from PySide6.QtCore import *
 from PySide6.QtWidgets import *
@@ -14,10 +12,13 @@ from PySide6.QtCore import QTimer
 import ssl
 import urllib.request
 from datetime import date as dt
-import yt_dlp
+from distutils.util import strtobool
 
 ssl._create_default_https_context = ssl._create_unverified_context
 out_adblock_list = []
+memory_saver_enabled = [False]
+dark_mode_enabled = [False]
+
 
 def ADBlock280():
     user_agent = 'Mozilla/5.0 (Linux; Android 7.1.2; en-la) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/52.0.2743.100 Mobile Safari/537.36 YJApp-ANDROID jp.co.yahoo.android.yjtop/13.91.1'
@@ -63,6 +64,8 @@ class MainWindow(QMainWindow):
         font.setPointSize(18)
         font2 = QFont()
         font2.setPointSize(18)
+        font3 = QFont()
+        font3.setPointSize(16)
         self.tabs = QTabWidget()
         self.tabs.setDocumentMode(True)
         self.tabs.tabBarDoubleClicked.connect(self.tab_open_doubleclick)
@@ -71,7 +74,8 @@ class MainWindow(QMainWindow):
         self.memory_saver = MemorySaver(self.tabs)
         self.dark_mode = DarkMode(self.tabs)
         self.add_tab_button = QPushButton(text="➕")
-        self.add_tab_button.setFont(font)
+        self.add_tab_button.setStyleSheet('QPushButton{background: rgba(0, 0, 0, 0);}')
+        self.add_tab_button.setFont(font3)
         self.add_tab_button.clicked.connect(self.add_new_tab)
         self.vertical_bar = QToolBar("Vertical Bar")
         self.vertical_bar.setOrientation(Qt.Orientation.Vertical)
@@ -188,7 +192,6 @@ class MainWindow(QMainWindow):
         if self.tabs.count() == 1:
             self.tabs.removeTab(1)
             self.add_new_tab()
-
         self.tabs.removeTab(i)
 
     def update_title(self, browser):
@@ -196,11 +199,11 @@ class MainWindow(QMainWindow):
             return
         title = self.tabs.currentWidget().page().title()
         formatted_title = title[:7] if len(title) > 7 else title.ljust(7)
+        self.setWindowTitle("%s OrbBrowser" % formatted_title)
+        self.tabs.setTabText(self.tabs.currentIndex(), formatted_title)
         if formatted_title == 'https:/':
             self.tabs.removeTab(0)
             self.add_new_tab()
-        self.setWindowTitle("%s OrbBrowser" % formatted_title)
-        self.tabs.setTabText(self.tabs.currentIndex(), formatted_title)
 
     def navigate_home(self):
         self.tabs.currentWidget().setUrl(QUrl("https://takerin-123.github.io/qqqqq.github.io/"))
@@ -258,10 +261,19 @@ class MainWindow(QMainWindow):
             shortcut_button = QAction("", self)
             shortcut_button.setText(current_tab.page().title())
             shortcut_button.setToolTip(url)
-            shortcut_button.triggered.connect(lambda: self.tabs.currentWidget().setUrl(QUrl(url)))
+            shortcut_button.triggered.connect(lambda: self.open_URL(url))
             self.vertical_bar.addAction(shortcut_button)
             self.tabs.currentWidget().setUrl(QUrl(url))
             self.save_shortcut_to_xml(title, url)
+
+    def open_URL(self, url, name):
+        self.tabs.currentWidget().setUrl(QUrl(url))
+        self.tabs.currentWidget().loadFinished.connect(self.loaded(name))
+
+    def loaded(self, title):
+        formatted_title = title[:7] if len(title) > 7 else title.ljust(7)
+        self.setWindowTitle("%s OrbBrowser" % formatted_title)
+        self.tabs.setTabText(self.tabs.currentIndex(), formatted_title)
 
     def save_shortcut_to_xml(self, title, url):
         if not os.path.exists('shortcuts.xml'):
@@ -296,10 +308,12 @@ class MainWindow(QMainWindow):
         name = name[:23] + '...' if len(name) > 23 else name
         shortcut_button = QAction(name, self)
         shortcut_button.url = url
+        QWebEngineProfile.defaultProfile().setUrlRequestInterceptor(WebEngineUrlRequestInterceptor())
         view = QWebEngineView()
+        view.page().profile().setHttpUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36')
         view.load(QUrl(url))
         view.iconChanged.connect(lambda icon, button=shortcut_button: button.setIcon(icon))
-        shortcut_button.triggered.connect(lambda: self.tabs.currentWidget().setUrl(QUrl(url)))
+        shortcut_button.triggered.connect(lambda: self.open_URL(url, name))
         self.vertical_bar.addAction(shortcut_button)
         self.save_shortcut_to_xml(name, url)
 
@@ -322,9 +336,9 @@ class MainWindow(QMainWindow):
         language_element = ET.SubElement(root, "language")
         language_element.text = self.language
         memory_saver_element = ET.SubElement(root, "memory_saver")
-        memory_saver_element.text = str(self.memory_saver.memory_saver_enabled)
+        memory_saver_element.text = str(memory_saver_enabled[0])
         dark_mode_element = ET.SubElement(root, "dark_mode")
-        dark_mode_element.text = str(self.dark_mode.dark_mode_enabled)
+        dark_mode_element.text = str(dark_mode_enabled[0])
         tree.write("settings.xml")
 
     def load_settings(self):
@@ -337,10 +351,10 @@ class MainWindow(QMainWindow):
             self.language = language_element.text
         memory_saver_element = root.find("memory_saver")
         if memory_saver_element is not None:
-            self.memory_saver.memory_saver_enabled = bool(memory_saver_element.text)
+            memory_saver_enabled[0] = bool(strtobool(memory_saver_element.text))
         dark_mode_element = root.find("dark_mode")
         if dark_mode_element is not None:
-            self.dark_mode.dark_mode_enabled = bool(dark_mode_element.text)
+            dark_mode_enabled[0] = bool(strtobool(dark_mode_element.text))
         self.update_language()
 
     def update_language(self):
@@ -406,6 +420,7 @@ class MemorySaver(QObject):
 
     def toggle_memory_saver(self, enabled):
         self.memory_saver_enabled = enabled
+        memory_saver_enabled[0] = enabled
         self.save_memory(self.tabs.currentIndex())
 
     def check_inactive_tabs(self):
@@ -430,6 +445,7 @@ class DarkMode(QObject):
 
     def toggle_dark_mode(self, enabled):
         self.dark_mode_enabled = enabled
+        dark_mode_enabled[0] = enabled
         for i in range(self.tabs.count()):
             web_view = self.tabs.widget(i)
             if enabled:
@@ -462,8 +478,54 @@ class SettingsDialog(QDialog):
         self.language = language
         self.memory_saver = memory_saver
         self.dark_mode = dark_mode
+        if not os.path.exists("settings.xml"):
+            return
+        tree = ET.parse("settings.xml")
+        root = tree.getroot()
+        language_element = root.find("language")
+        if language_element is not None:
+            self.language = language_element.text
+        memory_saver_element = root.find("memory_saver")
+        if memory_saver_element is not None:
+            memory_saver_enabled[0] = bool(strtobool(memory_saver_element.text))
+            print(memory_saver_enabled[0])
+        dark_mode_element = root.find("dark_mode")
+        if dark_mode_element is not None:
+            dark_mode_enabled[0] = bool(strtobool(dark_mode_element.text))
         self.init_ui()
-    
+
+    def closeEvent(self, e):
+        root = ET.Element("settings")
+        tree = ET.ElementTree(root)
+        ET.SubElement(root, "language").text = self.language
+        ET.SubElement(root, "memory_saver").text = str(self.check_memory_state())
+        ET.SubElement(root, "dark_mode").text = str(self.check_darkmode_state())
+        tree.write("settings.xml")
+
+    def check_memory_state(self):
+        if self.memory_saver_toggle.checkState() == Qt.CheckState.Checked:
+            return True
+        elif self.memory_saver_toggle.checkState() == Qt.CheckState.Unchecked:
+            return False
+
+    def check_darkmode_state(self):
+        if self.dark_mode_toggle.checkState() == Qt.CheckState.Checked:
+            return True
+        elif self.dark_mode_toggle.checkState() == Qt.CheckState.Unchecked:
+            return False
+
+    def check_darkmode(self):
+        if dark_mode_enabled[0]:
+            return Qt.CheckState.Checked
+        else:
+            return Qt.CheckState.Unchecked
+
+    def check_memory(self):
+        if memory_saver_enabled[0]:
+            return Qt.CheckState.Checked
+        else:
+            return Qt.CheckState.Unchecked
+
     def init_ui(self):
         layout = QVBoxLayout()
 
@@ -471,23 +533,24 @@ class SettingsDialog(QDialog):
         dark_mode_layout = QHBoxLayout()
         dark_mode_toggle = QLabel("ダークモード")
         self.dark_mode_toggle = QCheckBox()
-        self.dark_mode_toggle.setChecked(self.dark_mode.dark_mode_enabled)
+        print(dark_mode_enabled[0])
+        self.dark_mode_toggle.setChecked(dark_mode_enabled[0])
+        self.dark_mode_toggle.setCheckState(self.check_darkmode())
         self.dark_mode_toggle.toggled.connect(self.dark_mode.toggle_dark_mode)
         dark_mode_layout.addWidget(dark_mode_toggle)
         dark_mode_layout.addWidget(self.dark_mode_toggle)
         layout.addLayout(dark_mode_layout)
-        self.dark_mode_toggle.setChecked(self.dark_mode.dark_mode_enabled)
 
         # メモリーセイバーのトグルボタン
         memory_saver_layout = QHBoxLayout()
         memory_saver_toggle = QLabel("メモリーセイバー")
         self.memory_saver_toggle = QCheckBox()
-        self.memory_saver_toggle.setChecked(self.memory_saver.memory_saver_enabled)
+        self.memory_saver_toggle.setChecked(memory_saver_enabled[0])
+        self.memory_saver_toggle.setCheckState(self.check_memory())
         self.memory_saver_toggle.toggled.connect(self.memory_saver.toggle_memory_saver)
         memory_saver_layout.addWidget(memory_saver_toggle)
         memory_saver_layout.addWidget(self.memory_saver_toggle)
         layout.addLayout(memory_saver_layout)
-        self.memory_saver_toggle.setChecked(self.memory_saver.memory_saver_enabled)
 
         language_layout = QHBoxLayout()
         language_label = QLabel("言語設定")
@@ -495,7 +558,7 @@ class SettingsDialog(QDialog):
         self.language_toggle.addItems(["日本語", "English", "中文"])
         self.language_toggle.setCurrentText(self.language)
         self.language_toggle.currentTextChanged.connect(self.update_language)
-        language_layout.addWidget(self.language_toggle)
+        language_layout.addWidget(language_label)
         language_layout.addWidget(self.language_toggle)
         layout.addLayout(language_layout)
 
