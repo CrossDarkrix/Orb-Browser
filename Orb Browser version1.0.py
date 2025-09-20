@@ -9,54 +9,41 @@ from PySide6.QtCore import *
 from PySide6.QtWidgets import *
 from PySide6.QtGui import *
 from PySide6.QtWebEngineWidgets import *
-from PySide6.QtWebEngineCore import QWebEngineProfile
+from PySide6.QtWebEngineCore import QWebEngineProfile, QWebEngineUrlRequestInterceptor
 from PySide6.QtCore import QTimer
+import ssl
+import urllib.request
+from datetime import date as dt
 import yt_dlp
 
-class AdblockX:
-    def __init__(self, page, adBlocker):
-        self.page = page
-        self.block_lists = []
-        self.tracker_lists = []
-        self.adBlocker = adBlocker
-        self.session = aiohttp.ClientSession()
+ssl._create_default_https_context = ssl._create_unverified_context
+out_adblock_list = []
 
-    async def __aexit__(self, exc_type, exc, tb):
-        await self.session.close()
+def ADBlock280():
+    user_agent = 'Mozilla/5.0 (Linux; Android 7.1.2; en-la) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/52.0.2743.100 Mobile Safari/537.36 YJApp-ANDROID jp.co.yahoo.android.yjtop/13.91.1'
+    if dt.today().month <= 9:
+        month = '0{}'.format(dt.today().month)
+    else:
+        month = '{}'.format(dt.today().month)
+    _url = str(dt.today().year) + month
+    url = 'https://280blocker.net/files/280blocker_domain_{}.txt'.format(_url) # 280Adblockからリストの取得
+    file = urllib.request.urlopen(urllib.request.Request(url, headers={'User-Agent': user_agent}))
+    adblock_raw_file = re.sub('(.+#[ ].+)','', '{}'.format(file.read().decode('utf-8', errors='ignore')))
+    adblock_list = re.sub('\n{2}', '', re.sub('#[\s\S]', '', re.sub('(#[ ].+)', '', adblock_raw_file.replace('\r', '')))).replace('\n\n', '')
+    out_adblock_list[0:] = adblock_list.split('\n')
 
-    async def fetch_lists(self, url):
-        try:
-            async with self.session.get(url) as response:
-                if response.status != 200:
-                    raise Exception(f"Failed to fetch lists: {response.status}")
-                return (await response.text()).split('\n')
-        except Exception as e:
-            print(f"An error occurred: {e}")
-            return []
 
-    async def update_lists(self):
-        block_lists, tracker_lists = await asyncio.gather(
-            self.fetch_lists("https://easylist.to/easylist/easylist.txt"),
-            self.fetch_lists("https://easylist.to/easylist/easyprivacy.txt")
-        )
-        if block_lists and block_lists != self.block_lists:
-            self.block_lists = block_lists
-            await self.blockAds()
-        if tracker_lists and tracker_lists != self.tracker_lists:
-            self.tracker_lists = tracker_lists
-            await self.blockTrackers()
+class WebEngineUrlRequestInterceptor(QWebEngineUrlRequestInterceptor):
+    def check_rule(self, url):
+        if url in out_adblock_list:
+            return True
+        else:
+            return False
 
-    async def blockAds(self):
-        await self.adBlocker.setUrlFilterRules(self.block_lists)
-
-    async def blockTrackers(self):
-        await self.adBlocker.setUrlFilterRules(self.tracker_lists)
-
-    async def main(self):
-        await self.update_lists()
-
-    async def updateBlockedContent(self, event):
-        await self.update_lists()
+    def interceptRequest(self, info):
+        url = info.requestUrl().toString()
+        if self.check_rule(url):
+            info.block(True)
 
 class MainWindow(QMainWindow):
     def __init__(self, *args, **kwargs):
@@ -69,6 +56,7 @@ class MainWindow(QMainWindow):
         self.init_ui()
 
     def init_ui(self):
+        ADBlock280()
         self.tabs = QTabWidget()
         self.tabs.setDocumentMode(True)
         self.tabs.tabBarDoubleClicked.connect(self.tab_open_doubleclick)
@@ -159,8 +147,9 @@ class MainWindow(QMainWindow):
             qurl = QUrl(qurl)
         elif not isinstance(qurl, QUrl):
             raise TypeError("qurl must be a QUrl or a string")
-        
+        QWebEngineProfile.defaultProfile().setUrlRequestInterceptor(WebEngineUrlRequestInterceptor())
         browser = QWebEngineView()
+        browser.page().profile().setHttpUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36')
         browser.setUrl(qurl)
         i = self.tabs.addTab(browser, label)
         self.tabs.setCurrentIndex(i)
@@ -173,15 +162,19 @@ class MainWindow(QMainWindow):
             self.add_new_tab()
 
     def current_tab_changed(self, i):
-        qurl = self.tabs.currentWidget().url()
-        self.update_urlbar(qurl, self.tabs.currentWidget())
-        self.update_title(self.tabs.currentWidget())
+        if self.tabs.currentWidget() is not None:
+            qurl = self.tabs.currentWidget().url()
+            self.update_urlbar(qurl, self.tabs.currentWidget())
+            self.update_title(self.tabs.currentWidget())
 
     def close_current_tab(self, i):
         if self.tabs.count() < 2:
+            self.tabs.removeTab(i)
+            self.add_new_tab()
             return
         self.tabs.removeTab(i)
         QWidget.deleteLater()
+        self.add_new_tab()
     def update_title(self, browser):
         if browser != self.tabs.currentWidget():
             return
@@ -198,8 +191,7 @@ class MainWindow(QMainWindow):
         if "google.com/search?q=" in url:
             self.tabs.currentWidget().setUrl(QUrl(url))
         else:
-            google_search_url = "https://www.google.com/search?q=" + url
-            self.tabs.currentWidget().setUrl(QUrl(google_search_url))
+            self.tabs.currentWidget().setUrl(QUrl(url))
 
     def update_urlbar(self, q, browser=None):
         if browser != self.tabs.currentWidget():
