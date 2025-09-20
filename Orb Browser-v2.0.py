@@ -488,7 +488,6 @@ class SettingsDialog(QDialog):
         memory_saver_element = root.find("memory_saver")
         if memory_saver_element is not None:
             memory_saver_enabled[0] = bool(strtobool(memory_saver_element.text))
-            print(memory_saver_enabled[0])
         dark_mode_element = root.find("dark_mode")
         if dark_mode_element is not None:
             dark_mode_enabled[0] = bool(strtobool(dark_mode_element.text))
@@ -533,7 +532,6 @@ class SettingsDialog(QDialog):
         dark_mode_layout = QHBoxLayout()
         dark_mode_toggle = QLabel("ダークモード")
         self.dark_mode_toggle = QCheckBox()
-        print(dark_mode_enabled[0])
         self.dark_mode_toggle.setChecked(dark_mode_enabled[0])
         self.dark_mode_toggle.setCheckState(self.check_darkmode())
         self.dark_mode_toggle.toggled.connect(self.dark_mode.toggle_dark_mode)
