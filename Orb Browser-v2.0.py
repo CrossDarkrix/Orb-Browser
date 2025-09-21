@@ -1,11 +1,14 @@
+import multiprocessing
 import os
 import re
 import ssl
 import sys
+import time
 import urllib.request
 import xml.etree.ElementTree as ET
-from datetime import date as dt
+from datetime import date as dt, datetime as D_time
 from distutils.util import strtobool
+
 from PySide6.QtCore import *
 from PySide6.QtCore import QTimer
 from PySide6.QtGui import *
@@ -33,7 +36,40 @@ def ADBlock280():
     out_adblock_list[0:] = adblock_list.split('\n')
 
 
-class WebEngineUrlRequestInterceptor(QWebEngineUrlRequestInterceptor):
+def check_update(): # Auto Update ADBlock list
+    anker = ['0']
+    while True:
+        if D_time.now().second == 0:
+            while True:
+                try:
+                    if anker[0] == '0' and D_time.now().hour == 0: # 00:00
+                        ADBlock280()
+                        anker[0] = '1'
+                    elif anker[0] == '0' and D_time.now().hour == 12: # 12:00
+                        ADBlock280()
+                        anker[0] = '1'
+                    elif anker[0] == '0' and D_time.now().hour == 21: # 21:00
+                        ADBlock280()
+                        anker[0] = '1'
+                    else:
+                        if anker[0] == '1' and D_time.now().hour == 0:
+                            time.sleep(60)
+                        elif anker[0] == '1' and D_time.now().hour == 12:
+                            time.sleep(60)
+                        elif anker[0] == '1' and D_time.now().hour == 21:
+                            time.sleep(60)
+                        else:
+                            anker[0] = '0'
+                            time.sleep(60)
+                except KeyboardInterrupt:
+                    break
+                except SystemExit:
+                    break
+            break
+        else:
+            time.sleep(1)
+
+class WebEngineUrlRequestInterceptor(QWebEngineUrlRequestInterceptor): # ADBlock機能の実装
     def check_rule(self, url):
         if url in out_adblock_list:
             return True
@@ -59,6 +95,10 @@ class MainWindow(QMainWindow):
 
     def init_ui(self):
         ADBlock280()
+        if platform.system() == 'Windows':
+            multiprocessing.Process(target=check_update, daemon=True, name='CheckUpdateList').start()
+        elif platform.system() == 'Darwin':
+            multiprocessing.Process(target=check_update, daemon=True, name='CheckUpdateList').start()
         font = QFont()
         font.setPointSize(18)
         font2 = QFont()
@@ -156,6 +196,8 @@ class MainWindow(QMainWindow):
         self.toolbar.setFixedSize(self.toolbar.size())
         self.update_language()
         navtb.addAction(home_btn)
+
+
 
     def add_new_tab(self, qurl=None, label="ブランク"):
         if qurl is None:
@@ -365,31 +407,6 @@ class MainWindow(QMainWindow):
             self.setWindowTitle("关于 Orb Browser")
 
 
-class BookmarkAction(QAction, QMenu):
-    def __init__(self, title, parent):
-        super().__init__(title, parent)
-        self.setContextMenuPolicy(Qt.ActionsContextMenu)
-        self.customContextMenuRequested.connect(self.showContextMenu)
-        self.url = ""
-
-    def showContextMenu(self, point):
-        contextMenu = QMenu(self.parent())
-        deleteAction = QAction("削除", self)
-        deleteAction.triggered.connect(self.deleteBookmark)
-        contextMenu.addAction(deleteAction)
-        contextMenu.exec_(self.mapToGlobal(point))
-
-    def deleteBookmark(self):
-        tree = ET.parse('shortcuts.xml')
-        root = tree.getroot()
-        for shortcut in root.findall('shortcut'):
-            if shortcut.find('url').text == self.url:
-                root.remove(shortcut)
-                tree.write('shortcuts.xml')
-                break
-        self.parent().removeAction(self)
-
-
 class MemorySaver(QObject):
     def __init__(self, tabs):
         super().__init__()
@@ -590,9 +607,17 @@ class SettingsDialog(QDialog):
             self.dark_mode_toggle.setText("暗模式")
             self.memory_saver_toggle.setText("内存保护器")
 
-app = QApplication(sys.argv)
-app.setApplicationName("OrbBrowser")
-window = MainWindow()
-window.create_database()
-window.show()
-app.exec()
+
+def main():
+    app = QApplication(sys.argv)
+    app.setApplicationName("OrbBrowser")
+    window = MainWindow()
+    window.create_database()
+    window.show()
+    app.exec()
+
+if __name__ == '__main__':
+    import platform
+    if platform.system() == 'Windows':
+        multiprocessing.set_start_method('spawn')
+    main()
