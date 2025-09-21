@@ -197,8 +197,6 @@ class MainWindow(QMainWindow):
         self.update_language()
         navtb.addAction(home_btn)
 
-
-
     def add_new_tab(self, qurl=None, label="ブランク"):
         if qurl is None:
             qurl = QUrl('https://takerin-123.github.io/qqqqq.github.io/')
@@ -302,7 +300,7 @@ class MainWindow(QMainWindow):
             shortcut_button = QAction("", self)
             shortcut_button.setText(current_tab.page().title())
             shortcut_button.setToolTip(url)
-            shortcut_button.triggered.connect(lambda: self.open_URL(url))
+            shortcut_button.triggered.connect(lambda: self.open_URL(url, title))
             self.vertical_bar.addAction(shortcut_button)
             self.tabs.currentWidget().setUrl(QUrl(url))
             self.save_shortcut_to_xml(title, url)
